@@ -6,10 +6,12 @@ using API.Errors;
 using AutoMapper;
 using Core.Entities.OrderAggregate;
 using Core.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace API.Controllers
 {
+    [Authorize]
     public class OrdersController : BaseApiController
     {
         private readonly IOrderService _orderService;
@@ -22,7 +24,7 @@ namespace API.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Order>> CreateOrder(OrderDto orderDto)
+        public async Task<ActionResult<OrderToReturnDto>> CreateOrder(OrderDto orderDto)
         {
             var email = User.FindFirstValue(ClaimTypes.Email);
             var address = _mapper.Map<AddressDto, Address>(orderDto.ShipToAddress);
@@ -34,7 +36,7 @@ namespace API.Controllers
                 return BadRequest(new ApiResponse(400, "Problem creating order"));
             }
 
-            return Ok(order);
+            return Ok(_mapper.Map<Order, OrderToReturnDto>(order));
         }
 
         [HttpGet]

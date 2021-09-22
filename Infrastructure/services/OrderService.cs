@@ -11,13 +11,15 @@ namespace Infrastructure.services
     public class OrderService : IOrderService
     {
         private readonly IBasketRepository _basketRepo;
+        private readonly IPaymentService _paymentService;
         private readonly IUnitOfWork _unitOfWork;
 
         public OrderService(IUnitOfWork unitOfWork,
-                            IBasketRepository basketRepo)
+                            IBasketRepository basketRepo, IPaymentService paymentService)
         {
             _unitOfWork = unitOfWork;
             _basketRepo = basketRepo;
+            _paymentService = paymentService;
         }
 
         public async Task<Order> CreateOrderAsync(string buyerEmail, int deliveryMethodId, string basketId, Address shippingAddress)
@@ -39,7 +41,17 @@ namespace Infrastructure.services
             var deliveryMethod = await _unitOfWork.Repository<DeliveryMethod>().GetByIdAsync(deliveryMethodId);
             var subTotal = items.Sum(item => item.Price * item.Quantity);
 
-            var order = new Order(items, deliveryMethod, buyerEmail, shippingAddress, subTotal);
+            //check if order with paymentId exists
+            var spec = new OrderByPaymentIntentIdSpecification(basket.PaymentIntentId);
+            var existingOrder = await _unitOfWork.Repository<Order>().GetEntityWithSpec(spec);
+
+            if (existingOrder != null)
+            {
+                _unitOfWork.Repository<Order>().Delete(existingOrder);
+                await _paymentService.CreateOrUpdatePaymentIntent(basket.Id);
+            }
+
+            var order = new Order(items, deliveryMethod, buyerEmail, shippingAddress, subTotal, basket.PaymentIntentId);
             _unitOfWork.Repository<Order>().Add(order);
 
             //Save order to database
@@ -49,9 +61,6 @@ namespace Infrastructure.services
             {
                 return null;
             }
-
-            //Delete Basket
-            await _basketRepo.DeleteBasketAsync(basketId);
 
             return order;
         }
